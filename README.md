@@ -3,416 +3,386 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Onion Preservation Unit Simulator (Fixed)</title>
+    <title>Smart Onion Preservation Unit Simulator</title>
     <style>
-        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; color: #e0e0e0; background-color: #111; }
+        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #1a1a1a; color: #e0e0e0; }
         canvas { display: block; }
         .label {
             position: absolute;
-            background: rgba(0, 0, 0, 0.8);
+            background: rgba(0, 0, 0, 0.7);
             color: #fff;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 11px;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 0.8em;
             pointer-events: none;
-            border: 1px solid #4CAF50;
-            white-space: nowrap;
-            z-index: 100;
-            transform: translate(-50%, -50%);
-            text-shadow: 0 0 4px black;
+            transition: all 0.2s ease-out;
+            border: 1px solid rgba(255, 255, 255, 0.2);
         }
         #info-panel {
             position: absolute;
             top: 20px;
             left: 20px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 15px 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
             border-radius: 12px;
-            max-width: 300px;
+            max-width: 350px;
             pointer-events: none;
-            border: 1px solid #4CAF50;
-            backdrop-filter: blur(5px);
-            z-index: 200;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease-in-out;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
-        #info-panel h1 { font-size: 1.5rem; margin: 0 0 5px 0; color: #4CAF50; font-weight: 500; }
-        #info-panel p { font-size: 0.85rem; margin: 0; line-height: 1.5; color: #ddd; }
+        #info-panel h1 { font-size: 2rem; margin-top: 0; margin-bottom: 5px; color: #4CAF50; }
+        #info-panel p { font-size: 0.9rem; margin: 0; line-height: 1.4; }
         #instructions {
             position: absolute;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
             background: rgba(0, 0, 0, 0.6);
-            padding: 8px 20px;
-            border-radius: 30px;
+            padding: 10px 20px;
+            border-radius: 12px;
             font-size: 0.9rem;
-            color: #ccc;
-            border: 1px solid #4CAF50;
-            z-index: 200;
-            letter-spacing: 0.5px;
+            color: #b0b0b0;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
         }
     </style>
 </head>
 <body>
+
 <div id="info-panel">
-    <h1>SOPU Simulator</h1>
-    <p>Smart Onion Preservation Unit. Solar-powered IoT monitoring and bottom-up ventilation system. All components labeled.</p>
+    <h1>The Smart Onion Unit</h1>
+    <p>A smart, solar-powered solution to reduce post-harvest onion loss. Rotate and zoom to explore the design.</p>
 </div>
-<div id="instructions">🖱️ Drag to Rotate • Scroll to Zoom • Hover labels indicate components</div>
+<div id="instructions">
+    Use your mouse or finger to rotate and zoom.
+</div>
 
-<!-- Use specific version of Three.js and OrbitControls from CDN (fixed path) -->
-<script type="importmap">
-    {
-        "imports": {
-            "three": "https://unpkg.com/three@0.128.0/build/three.module.js",
-            "three/addons/": "https://unpkg.com/three@0.128.0/examples/jsm/"
-        }
-    }
-</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 
-<script type="module">
-    import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+<script>
+    // --- Scene Setup ---
+    let scene, camera, renderer, controls;
+    let airParticles;
+    const initialCameraPosition = new THREE.Vector3(8, 4, 10);
+    const labels = [];
 
-    // --- setup scene, camera, renderer ---
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x111a22); // darker background to make labels pop
-    
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(14, 7, 16);
-    camera.lookAt(0, 2, 0);
+    function init() {
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a1a);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.shadowMap.enabled = true; // optional but adds depth
-    document.body.appendChild(renderer.domElement);
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.copy(initialCameraPosition);
 
-    // --- lighting ---
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-    scene.add(ambientLight);
-    
-    const sunLight = new THREE.DirectionalLight(0xfff5e6, 1);
-    sunLight.position.set(10, 25, 10);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 1024;
-    sunLight.shadow.mapSize.height = 1024;
-    scene.add(sunLight);
-    
-    const fillLight = new THREE.PointLight(0x446688, 0.5);
-    fillLight.position.set(-5, 5, 10);
-    scene.add(fillLight);
+        renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
 
-    // --- controls ---
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.06;
-    controls.maxPolarAngle = Math.PI / 2;
-    controls.target.set(0, 2, 0);
-    controls.update();
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0x404040, 2);
+        scene.add(ambientLight);
 
-    // --- data arrays for animations and labels ---
-    const fanBlades = [];
-    const labels = []; // { element, object }
-    let airParticles = null;
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+        directionalLight.position.set(5, 10, 7);
+        scene.add(directionalLight);
 
-    // --- helper to create labels ---
-    function addLabel(parentObject, text, offsetY = 0.8) {
-        const div = document.createElement('div');
-        div.className = 'label';
-        div.textContent = text;
-        document.body.appendChild(div);
-        labels.push({ 
-            el: div, 
-            obj: parentObject,
-            offset: new THREE.Vector3(0, offsetY, 0) // slight offset above object
-        });
+        // --- Orbit Controls ---
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.screenSpacePanning = false;
+        controls.maxPolarAngle = Math.PI / 2;
+        controls.minDistance = 5;
+        controls.maxDistance = 20;
+
+        createModel();
+        
+        window.addEventListener('resize', onWindowResize, false);
+        animate();
     }
 
-    // --- build the entire model ---
     function createModel() {
-        // materials
-        const matShed = new THREE.MeshStandardMaterial({ color: 0x8B5A2B, roughness: 0.7 }); // wood
-        const matOnion = new THREE.MeshPhongMaterial({ color: 0xffaa33, emissive: 0x331100 });
-        const matSolar = new THREE.MeshStandardMaterial({ color: 0x1e2b3a, emissive: 0x102030 });
-        const matChamber = new THREE.MeshStandardMaterial({ color: 0x556677, roughness: 0.6 });
-        const matTech = new THREE.MeshStandardMaterial({ color: 0x2a5a4a, transparent: true, opacity: 0.5 });
-        const matSort = new THREE.MeshStandardMaterial({ color: 0x6a3e8a, transparent: true, opacity: 0.5 });
-        const matGround = new THREE.MeshStandardMaterial({ color: 0x3a4a3a, roughness: 0.9 });
-        const matWire = new THREE.LineBasicMaterial({ color: 0xffaa00 });
-        const matBat1 = new THREE.MeshStandardMaterial({ color: 0xc0392b }); // red
-        const matBat2 = new THREE.MeshStandardMaterial({ color: 0x27ae60 }); // green
-        const matCool = new THREE.MeshStandardMaterial({ color: 0x2c82b0, transparent: true, opacity: 0.7 }); // blue
-        const matSilica = new THREE.MeshPhongMaterial({ color: 0xb0c4de, emissive: 0x112233 }); // light blue
+        // --- Materials ---
+        const shedMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.8, metalness: 0.1 });
+        const onionMaterial = new THREE.MeshPhongMaterial({ color: 0xffa500, shininess: 30 });
+        const solarPanelMaterial = new THREE.MeshBasicMaterial({ color: 0x222222, side: THREE.DoubleSide });
+        const chamberMaterial = new THREE.MeshStandardMaterial({ color: 0x5a5a5a, metalness: 0.2, roughness: 0.6 });
+        const sensorMaterial = new THREE.MeshPhongMaterial({ color: 0x00aaff, shininess: 80 });
+        const fanMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.8, roughness: 0.3 });
+        const coolingPanelMaterial = new THREE.MeshBasicMaterial({ color: 0x00ffff, transparent: true, opacity: 0.3 });
+        const silicaGelMaterial = new THREE.MeshPhongMaterial({ color: 0xadd8e6, shininess: 50 });
+        const technicalChamberMaterial = new THREE.MeshStandardMaterial({ color: 0x2e8b57, metalness: 0.2, roughness: 0.6, transparent: true, opacity: 0.7 });
+        const secondChamberMaterial = new THREE.MeshStandardMaterial({ color: 0x800080, metalness: 0.2, roughness: 0.6, transparent: true, opacity: 0.7 });
+        const tDoorMaterial = new THREE.MeshStandardMaterial({ color: 0x6a0dad, metalness: 0.8, roughness: 0.4 });
+        const groundMaterial = new THREE.MeshBasicMaterial({ color: 0x5c4a31 });
+        const wireMaterial = new THREE.LineBasicMaterial({ color: 0xffff00 });
 
-        // Ground
-        const ground = new THREE.Mesh(new THREE.BoxGeometry(40, 0.5, 40), matGround);
-        ground.position.y = -3.0;
-        ground.receiveShadow = true;
-        scene.add(ground);
+        // --- Ground Plane ---
+        const groundGeometry = new THREE.BoxGeometry(20, 0.1, 20);
+        const groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+        groundMesh.position.y = -3;
+        scene.add(groundMesh);
 
-        // Main shed structure (walls and roof)
-        // Roof (visible top)
-        const roof = new THREE.Mesh(new THREE.BoxGeometry(11.2, 0.4, 9.2), matShed);
-        roof.position.y = 5.2;
-        roof.castShadow = true;
-        scene.add(roof);
-        addLabel(roof, "Insulated Roof");
+        // --- Shed and Walls ---
+        const shedGeometry = new THREE.BoxGeometry(10, 5, 8);
+        const shedMesh = new THREE.Mesh(shedGeometry, new THREE.MeshBasicMaterial({ color: 0x8B4513, transparent: true, opacity: 0.1 }));
+        shedMesh.position.y = 2.5;
+        scene.add(shedMesh);
+        
+        const roofGeometry = new THREE.BoxGeometry(10.2, 0.2, 8.2);
+        const roofMesh = new THREE.Mesh(roofGeometry, shedMaterial);
+        roofMesh.position.y = 5.1;
+        scene.add(roofMesh);
 
-        // Walls
-        const wallBack = new THREE.Mesh(new THREE.BoxGeometry(11, 5, 0.3), matShed);
-        wallBack.position.set(0, 2.5, -4.5);
-        wallBack.castShadow = true;
-        scene.add(wallBack);
+        const wallGeometry = new THREE.BoxGeometry(0.1, 5, 8);
+        const wallMesh1 = new THREE.Mesh(wallGeometry, shedMaterial);
+        wallMesh1.position.set(-5, 2.5, 0);
+        scene.add(wallMesh1);
+        
+        const wallMesh2 = new THREE.Mesh(wallGeometry, shedMaterial);
+        wallMesh2.position.set(5, 2.5, 0);
+        scene.add(wallMesh2);
+        
+        const wall3Geometry = new THREE.BoxGeometry(10, 5, 0.1);
+        const wallMesh3 = new THREE.Mesh(wall3Geometry, shedMaterial);
+        wallMesh3.position.set(0, 2.5, -4);
+        scene.add(wallMesh3);
 
-        const wallLeft = new THREE.Mesh(new THREE.BoxGeometry(0.3, 5, 9), matShed);
-        wallLeft.position.set(-5.5, 2.5, 0);
-        wallLeft.castShadow = true;
-        scene.add(wallLeft);
+        const sideVentGeometry = new THREE.BoxGeometry(10, 5, 0.1);
+        const sideVentMesh = new THREE.Mesh(sideVentGeometry, new THREE.MeshStandardMaterial({ color: 0x333333, transparent: true, opacity: 0.8 }));
+        sideVentMesh.position.set(0, 2.5, 4);
+        scene.add(sideVentMesh);
 
-        const wallRight = new THREE.Mesh(new THREE.BoxGeometry(0.3, 5, 9), matShed);
-        wallRight.position.set(5.5, 2.5, 0);
-        wallRight.castShadow = true;
-        scene.add(wallRight);
+        // Exhaust fans on side walls
+        const exhaustFanGeometry = new THREE.CylinderGeometry(0.5, 0.5, 0.2, 32);
+        const exhaustFanMesh1 = new THREE.Mesh(exhaustFanGeometry, fanMaterial);
+        exhaustFanMesh1.position.set(-5, 2.5, 2);
+        exhaustFanMesh1.rotation.z = Math.PI / 2;
+        scene.add(exhaustFanMesh1);
+        addLabel(exhaustFanMesh1, "Exhaust Fan");
 
-        // Front wall with ventilation (semi-transparent)
-        const ventWall = new THREE.Mesh(new THREE.BoxGeometry(11, 5, 0.2), new THREE.MeshStandardMaterial({ color: 0x888888, transparent: true, opacity: 0.3 }));
-        ventWall.position.set(0, 2.5, 4.5);
-        ventWall.receiveShadow = true;
-        scene.add(ventWall);
-        addLabel(ventWall, "Ventilation Wall (Open)");
+        const exhaustFanMesh2 = new THREE.Mesh(exhaustFanGeometry, fanMaterial);
+        exhaustFanMesh2.position.set(5, 2.5, -2);
+        exhaustFanMesh2.rotation.z = Math.PI / 2;
+        scene.add(exhaustFanMesh2);
+        addLabel(exhaustFanMesh2, "Exhaust Fan");
+        
+        // --- Raised Floor with Gaps ---
+        const floorGeometry = new THREE.BoxGeometry(9, 0.1, 7);
+        const floorMesh = new THREE.Mesh(floorGeometry, new THREE.MeshStandardMaterial({ color: 0x7a7a7a, roughness: 0.8 }));
+        floorMesh.position.y = 0;
+        scene.add(floorMesh);
 
-        // Fans (3 holes with rotating blades)
-        const holeGeo = new THREE.TorusGeometry(0.5, 0.08, 16, 32);
-        const bladeGeo = new THREE.BoxGeometry(0.9, 0.1, 0.1);
-        const bladeMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, emissive: 0x222222 });
+        const gapsGeometry = new THREE.BoxGeometry(0.1, 0.1, 7); // Made gaps very small
+        const gapsMaterial = new THREE.MeshBasicMaterial({ color: 0x1a1a1a });
+        const gapCount = 40; // Increased gap count
+        for (let i = 0; i < gapCount; i++) {
+            const gap = new THREE.Mesh(gapsGeometry, gapsMaterial);
+            gap.position.set(4.5 - i * 0.22, 0.05, 0); // Adjusted spacing
+            scene.add(gap);
+        }
 
-        for (let i = 0; i < 3; i++) {
-            const xPos = -3 + i * 3;
-            // Hole ring
-            const hole = new THREE.Mesh(holeGeo, new THREE.MeshStandardMaterial({ color: 0x333333, emissive: 0x111111 }));
-            hole.rotation.x = Math.PI / 2; // lie flat on Z axis? Actually we want ring facing outward
-            hole.rotation.y = 0;
-            hole.rotation.z = 0;
-            hole.position.set(xPos, 2.5, 4.45);
-            scene.add(hole);
+        // --- Onions on the Floor ---
+        const onionsGroup = new THREE.Group();
+        const onionGeometry = new THREE.SphereGeometry(0.12, 16, 16);
+        const onionSpacing = 0.1; // Reduced spacing to make it denser
+        const gridCount = 40; // Increased grid count
 
-            // Fan blades group
-            const bladeGroup = new THREE.Group();
-            for (let j = 0; j < 3; j++) {
-                const blade = new THREE.Mesh(bladeGeo, bladeMat);
-                blade.rotation.z = (j * Math.PI * 2) / 3;
-                blade.position.set(0, 0, 0);
-                blade.castShadow = true;
-                bladeGroup.add(blade);
+        for (let i = 0; i < gridCount; i++) {
+            for (let j = 0; j < gridCount; j++) {
+                const onion = new THREE.Mesh(onionGeometry, onionMaterial);
+                onion.position.x = (i - gridCount / 2) * onionSpacing;
+                onion.position.z = (j - gridCount / 2) * onionSpacing;
+                onion.position.y = 0.2 + Math.random() * 0.1;
+                onionsGroup.add(onion);
             }
-            bladeGroup.position.set(xPos, 2.5, 4.5); // slightly in front
-            scene.add(bladeGroup);
-            fanBlades.push(bladeGroup);
-            
-            if (i === 1) addLabel(bladeGroup, "Exhaust Fans (Active)");
         }
+        scene.add(onionsGroup);
+        
+        // --- Underground Air Chamber ---
+        const airChamberGeometry = new THREE.BoxGeometry(9, 2, 7);
+        const airChamberMesh = new THREE.Mesh(airChamberGeometry, chamberMaterial);
+        airChamberMesh.position.set(0, -1, 0);
+        scene.add(airChamberMesh);
+        addLabel(airChamberMesh, "Underground Air Chamber");
 
-        // Floor inside shed
-        const floor = new THREE.Mesh(new THREE.BoxGeometry(10.4, 0.2, 8.4), new THREE.MeshStandardMaterial({ color: 0x5a6a7a }));
-        floor.position.y = 0.0;
-        floor.receiveShadow = true;
-        scene.add(floor);
-        addLabel(floor, "Perforated Floor");
+        // --- Technical Chamber ---
+        const techChamberGeometry = new THREE.BoxGeometry(4, 2, 4);
+        const techChamberMesh = new THREE.Mesh(techChamberGeometry, technicalChamberMaterial);
+        techChamberMesh.position.set(7, -1, 0);
+        scene.add(techChamberMesh);
+        addLabel(techChamberMesh, "Technical Chamber");
 
-        // Onions bulk (many spheres)
-        const onionGroup = new THREE.Group();
-        const onionGeo = new THREE.SphereGeometry(0.22, 8);
-        for (let i = 0; i < 350; i++) {
-            const o = new THREE.Mesh(onionGeo, matOnion);
-            o.position.set(
-                (Math.random() - 0.5) * 8,
-                0.2 + Math.random() * 1.0,
-                (Math.random() - 0.5) * 6
-            );
-            o.castShadow = true;
-            o.receiveShadow = true;
-            onionGroup.add(o);
+        // --- Additional Chamber on opposite side ---
+        const secondChamberGeometry = new THREE.BoxGeometry(4, 2, 4);
+        const secondChamberMesh = new THREE.Mesh(secondChamberGeometry, secondChamberMaterial);
+        secondChamberMesh.position.set(-7, -1, 0);
+        scene.add(secondChamberMesh);
+        addLabel(secondChamberMesh, "Sorting Chamber");
+
+
+        // --- T-shaped Door ---
+        const tDoorGeometry = new THREE.BoxGeometry(1, 2, 0.5);
+        const tDoorMesh = new THREE.Mesh(tDoorGeometry, tDoorMaterial);
+        tDoorMesh.position.set(5, -1, -2);
+        scene.add(tDoorMesh);
+        addLabel(tDoorMesh, "Air Intake");
+
+        // --- Connectors from T-Door to Chambers ---
+        const tToAirPipeGeo = new THREE.BoxGeometry(1, 0.5, 4);
+        const tToAirPipe = new THREE.Mesh(tToAirPipeGeo, tDoorMaterial);
+        tToAirPipe.position.set(5.5, -1, 0);
+        scene.add(tToAirPipe);
+        
+        const tToTechPipeGeo = new THREE.BoxGeometry(1, 0.5, 4);
+        const tToTechPipe = new THREE.Mesh(tToTechPipeGeo, tDoorMaterial);
+        tToTechPipe.position.set(6.5, -1, 2);
+        scene.add(tToTechPipe);
+        
+        // --- Raspberry Pi and Sensors ---
+        const rpGeometry = new THREE.BoxGeometry(0.5, 0.1, 0.3);
+        const rpMaterial = new THREE.MeshBasicMaterial({ color: 0xcc0000 });
+        const raspberryPi = new THREE.Mesh(rpGeometry, rpMaterial);
+        raspberryPi.position.set(7, -1, 0.5);
+        scene.add(raspberryPi);
+        addLabel(raspberryPi, "Raspberry Pi");
+
+        const sensorGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+        const dhtSensor = new THREE.Mesh(sensorGeometry, sensorMaterial);
+        dhtSensor.position.set(7.5, -1, 0.2);
+        scene.add(dhtSensor);
+        addLabel(dhtSensor, "DHT11 Sensor");
+
+        // New sensors inside the main chamber
+        const sensor2 = new THREE.Mesh(sensorGeometry, sensorMaterial);
+        sensor2.position.set(-4.5, 2.5, 0);
+        scene.add(sensor2);
+        addLabel(sensor2, "Internal Sensor");
+
+        const sensor3 = new THREE.Mesh(sensorGeometry, sensorMaterial);
+        sensor3.position.set(4.5, 2.5, 0);
+        scene.add(sensor3);
+        addLabel(sensor3, "Internal Sensor");
+
+        const sensor4 = new THREE.Mesh(sensorGeometry, sensorMaterial);
+        sensor4.position.set(0, 2.5, -3.5);
+        scene.add(sensor4);
+        addLabel(sensor4, "Internal Sensor");
+
+        // --- Cooling Panels and Fans ---
+        const panelGeometry = new THREE.BoxGeometry(1.5, 0.1, 0.5);
+        const panelMesh = new THREE.Mesh(panelGeometry, coolingPanelMaterial);
+        panelMesh.position.set(7, -0.5, -1.5);
+        scene.add(panelMesh);
+        addLabel(panelMesh, "Cooling Panels");
+        
+        const fanGeometry = new THREE.CylinderGeometry(0.5, 0.1, 0.1, 32);
+        const fanMesh = new THREE.Mesh(fanGeometry, fanMaterial);
+        fanMesh.position.set(7, -0.5, 1.5);
+        scene.add(fanMesh);
+        addLabel(fanMesh, "Air-Pushing Fans");
+
+        // --- Silica Gel ---
+        const gelGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+        const gelGroup = new THREE.Group();
+        for (let i = 0; i < 50; i++) {
+            const gel = new THREE.Mesh(gelGeometry, silicaGelMaterial);
+            gel.position.x = (Math.random() - 0.5) * 8;
+            gel.position.z = (Math.random() - 0.5) * 6;
+            gel.position.y = 0.5 + Math.random() * 0.1;
+            gelGroup.add(gel);
         }
-        scene.add(onionGroup);
-        addLabel(onionGroup, "Onions Storage (~350 units)", 1.2);
+        scene.add(gelGroup);
+        addLabel(gelGroup, "Dehumidifying Agents");
 
-        // Underground air chamber (visible through floor)
-        const airChamber = new THREE.Mesh(new THREE.BoxGeometry(10, 2.2, 8), new THREE.MeshStandardMaterial({ color: 0x445566, emissive: 0x112233, transparent: true, opacity: 0.5 }));
-        airChamber.position.y = -1.2;
-        airChamber.receiveShadow = true;
-        scene.add(airChamber);
-        addLabel(airChamber, "Underground Air Plenum", -0.5);
+        // --- Solar Panels and Wires ---
+        const solarPanelGeo = new THREE.BoxGeometry(5, 0.1, 3);
+        const solarPanel = new THREE.Mesh(solarPanelGeo, solarPanelMaterial);
+        solarPanel.position.set(0, 5.5, -2);
+        solarPanel.rotation.x = -Math.PI / 6;
+        scene.add(solarPanel);
+        addLabel(solarPanel, "Solar Panel");
 
-        // Technical chamber (right)
-        const techChamber = new THREE.Mesh(new THREE.BoxGeometry(4.5, 3.5, 4.5), matTech);
-        techChamber.position.set(8.0, -1.2, 0);
-        techChamber.castShadow = true;
-        scene.add(techChamber);
-        addLabel(techChamber, "Technical Chamber (IoT)", 1.0);
+        const wirePoints = [];
+        wirePoints.push(new THREE.Vector3(0, 5.5, -2)); // From solar panel on roof
+        wirePoints.push(new THREE.Vector3(5, 5.1, -2)); // To the edge of the roof
+        wirePoints.push(new THREE.Vector3(5.1, -1, -2)); // Down the side of the shed
+        wirePoints.push(new THREE.Vector3(6.5, -1, 1)); // To the technical chamber
+        const wireGeometry = new THREE.BufferGeometry().setFromPoints(wirePoints);
+        const wire = new THREE.Line(wireGeometry, wireMaterial);
+        scene.add(wire);
 
-        // Sorting chamber (left)
-        const sortChamber = new THREE.Mesh(new THREE.BoxGeometry(4.5, 3.5, 4.5), matSort);
-        sortChamber.position.set(-8.0, -1.2, 0);
-        sortChamber.castShadow = true;
-        scene.add(sortChamber);
-        addLabel(sortChamber, "Sorting & Pre-treatment", 1.0);
-
-        // Batteries inside tech chamber
-        const bat1 = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 0.8), matBat1);
-        bat1.position.set(7.2, -1.4, -0.8);
-        bat1.castShadow = true;
-        scene.add(bat1);
-        addLabel(bat1, "Battery Bank A");
-
-        const bat2 = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.2, 0.8), matBat2);
-        bat2.position.set(7.2, -1.4, 0.8);
-        bat2.castShadow = true;
-        scene.add(bat2);
-        addLabel(bat2, "Battery Bank B");
-
-        // Cooling panel (radiator)
-        const coolPanel = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.0, 2.5), matCool);
-        coolPanel.position.set(9.8, -1.0, 0);
-        coolPanel.castShadow = true;
-        scene.add(coolPanel);
-        addLabel(coolPanel, "Cooling Heat Exchanger");
-
-        // Raspberry Pi / controller (small green board)
-        const piGeo = new THREE.BoxGeometry(0.8, 0.15, 1.2);
-        const piMat = new THREE.MeshStandardMaterial({ color: 0x2ecc71 });
-        const pi = new THREE.Mesh(piGeo, piMat);
-        pi.position.set(8.5, 0.2, 1.2);
-        pi.castShadow = true;
-        scene.add(pi);
-        addLabel(pi, "Raspberry Pi & Sensors");
-
-        // Silica gel packets (small spheres)
-        const silicaGroup = new THREE.Group();
-        const sGeo = new THREE.SphereGeometry(0.1, 5);
-        for (let i = 0; i < 40; i++) {
-            const s = new THREE.Mesh(sGeo, matSilica);
-            s.position.set(
-                (Math.random() - 0.5) * 7,
-                0.4 + Math.random() * 1.0,
-                (Math.random() - 0.5) * 5
-            );
-            silicaGroup.add(s);
-        }
-        scene.add(silicaGroup);
-        addLabel(silicaGroup, "Silica Gel Sachets", 1.3);
-
-        // Solar panels on roof
-        const solarGroup = new THREE.Group();
-        const panelMat = new THREE.MeshStandardMaterial({ color: 0x1a2b3c, emissive: 0x102030 });
-        for (let k = 0; k < 4; k++) {
-            const panel = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.1, 1.2), panelMat);
-            panel.position.set(-3 + k * 2.2, 5.45, -1 + (k%2)*2);
-            panel.rotation.y = 0.1;
-            panel.castShadow = true;
-            solarGroup.add(panel);
-        }
-        scene.add(solarGroup);
-        addLabel(solarGroup, "Solar Array (400W)", 0.6);
-
-        // Wiring from solar to tech chamber (yellow line)
-        const points = [
-            new THREE.Vector3(-1, 5.5, 0),
-            new THREE.Vector3(3, 5.5, 0),
-            new THREE.Vector3(5, 4.0, 0),
-            new THREE.Vector3(7, 0.5, 0),
-            new THREE.Vector3(7.5, -1.0, 0)
-        ];
-        const wireGeo = new THREE.BufferGeometry().setFromPoints(points);
-        const wireLine = new THREE.Line(wireGeo, matWire);
-        scene.add(wireLine);
-        addLabel(wireLine, "Power & Data Cable");
-
-        // Airflow particles (rising from air chamber)
+        // Animate the air particles
         airParticles = new THREE.Group();
-        const pGeo = new THREE.SphereGeometry(0.05, 4);
-        const pMat = new THREE.MeshStandardMaterial({ color: 0xaaccff, emissive: 0x224466 });
-        for (let i = 0; i < 120; i++) {
-            const p = new THREE.Mesh(pGeo, pMat);
-            p.position.set(
-                (Math.random() - 0.5) * 8,
-                -1.5 + Math.random() * 2.5,
-                (Math.random() - 0.5) * 6
-            );
-            p.userData = { speed: 0.01 + Math.random() * 0.02, startY: p.position.y };
-            airParticles.add(p);
+        const particleGeometry = new THREE.SphereGeometry(0.02, 8, 8);
+        const particleMaterial = new THREE.MeshBasicMaterial({ color: 0x4ddb4d });
+
+        for (let i = 0; i < 300; i++) {
+            const particle = new THREE.Mesh(particleGeometry, particleMaterial);
+            particle.position.x = (Math.random() - 0.5) * 8;
+            particle.position.z = (Math.random() - 0.5) * 6;
+            particle.position.y = -2; // Start in the chamber
+            particle.userData.speed = 0.005 + Math.random() * 0.01;
+            airParticles.add(particle);
         }
         scene.add(airParticles);
-        addLabel(airParticles, "Airflow (bottom-up ventilation)", 0.5);
+
+        function addLabel(object, text) {
+            const div = document.createElement('div');
+            div.className = 'label';
+            div.textContent = text;
+            document.body.appendChild(div);
+            labels.push({ element: div, object: object });
+        }
     }
 
-    // --- build the scene ---
-    createModel();
-
-    // --- window resize handler ---
-    window.addEventListener('resize', () => {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-    });
-
-    // --- animation loop ---
+    // --- Animation Loop ---
     function animate() {
         requestAnimationFrame(animate);
 
-        // rotate fan blades
-        fanBlades.forEach(blade => {
-            blade.rotation.z += 0.2;
+        // Animate air particles from chamber up through gaps
+        airParticles.children.forEach(particle => {
+            if (particle.position.y < -0.9) {
+                // Inside chamber, move up
+                particle.position.y += particle.userData.speed;
+            } else if (particle.position.y < 0.2) {
+                // Passing through gaps, a bit faster
+                particle.position.y += particle.userData.speed * 2;
+            } else {
+                // Onions level, move slower and dissipate
+                particle.position.y += particle.userData.speed * 0.5;
+            }
+
+            if (particle.position.y > 1) {
+                particle.position.y = -2; // Reset to start
+            }
         });
 
-        // animate air particles upward
-        if (airParticles) {
-            airParticles.children.forEach(p => {
-                p.position.y += p.userData.speed;
-                if (p.position.y > 2.0) {
-                    p.position.y = -1.8;
-                }
-            });
-        }
+        // Update labels
+        labels.forEach(label => {
+            const vector = new THREE.Vector3();
+            label.object.getWorldPosition(vector);
+            const position = vector.project(camera);
 
-        // update label positions (project 3D to 2D)
-        labels.forEach(item => {
-            const obj = item.obj;
-            // compute world position of object center plus offset
-            const worldPos = obj.position.clone();
-            if (obj.parent) {
-                obj.parent.localToWorld(worldPos);
-            }
-            // add manual offset (upwards)
-            worldPos.y += 0.8; 
+            const x = (position.x * .5 + .5) * window.innerWidth;
+            const y = (position.y * -.5 + .5) * window.innerHeight;
 
-            // project to screen
-            worldPos.project(camera);
-
-            const x = (worldPos.x * 0.5 + 0.5) * window.innerWidth;
-            const y = (-worldPos.y * 0.5 + 0.5) * window.innerHeight;
-
-            // check if behind camera or far outside
-            if (worldPos.z < 1 && x > 0 && x < window.innerWidth && y > 0 && y < window.innerHeight) {
-                item.el.style.display = 'block';
-                item.el.style.left = x + 'px';
-                item.el.style.top = y + 'px';
-            } else {
-                item.el.style.display = 'none';
-            }
+            label.element.style.transform = `translate(-50%, -50%) translate(${x}px,${y}px)`;
         });
 
         controls.update();
         renderer.render(scene, camera);
     }
 
-    animate();
+    // --- Handle Window Resize ---
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
 
-    // small fix: initial label display might be improved by calling update once after a delay
-    setTimeout(() => {
-        // force a quick camera move to recalc labels
-        camera.position.set(14, 7, 16);
-        controls.update();
-    }, 100);
+    window.onload = init;
 </script>
 </body>
 </html>
